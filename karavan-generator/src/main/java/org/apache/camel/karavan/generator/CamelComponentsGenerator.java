@@ -16,60 +16,52 @@
  */
 package org.apache.camel.karavan.generator;
 
-import io.vertx.core.Vertx;
 import io.vertx.core.json.JsonObject;
 import org.apache.camel.builder.RouteBuilder;
-import org.jboss.logging.Logger;
 
-import javax.inject.Inject;
 import java.io.*;
-import java.nio.file.Files;
 import java.nio.file.Paths;
-import java.nio.file.StandardCopyOption;
 import java.util.List;
 import java.util.stream.Collectors;
 
-public final class CamelComponentsGenerator {
-
-    @Inject
-    Vertx vertx;
-
-    private static final Logger LOGGER = Logger.getLogger(KameletGenerator.class.getName());
+public final class CamelComponentsGenerator extends AbstractGenerator {
 
     public static void main(String[] args) throws Exception {
         CamelComponentsGenerator.generate();
         System.exit(0);
     }
 
-    public static void generate() throws Exception {
+    public static void generate(String... paths) throws Exception {
         CamelComponentsGenerator g = new CamelComponentsGenerator();
-        g.createCreateComponents("karavan-app/src/main/resources/components");
-        g.createCreateComponents("karavan-vscode/components");
+        for (String path : paths) {
+            g.createCreateComponents(path + "/metadata", true);
+        }
     }
 
-    private void createCreateComponents(String path) {
+    private void createCreateComponents(String path, boolean singleFile) {
         List<String> components = getComponents();
         StringBuilder list = new StringBuilder();
-        components.forEach(name -> {
+        StringBuilder sources = new StringBuilder("[\n");
+
+        for (int i = 0; i < components.size(); i++) {
+            String name = components.get(i);
             String json = getComponent(name);
             JsonObject obj = new JsonObject(json);
             obj.remove("componentProperties");
             if (!obj.getJsonObject("component").getBoolean("deprecated")
-            && !obj.getJsonObject("component").getString("name").equals("kamelet")){
-                saveFile(path, name + ".json", obj.toString());
+                    && !obj.getJsonObject("component").getString("name").equals("kamelet")) {
+                if (singleFile) {
+                    sources.append(obj).append( i != components.size() - 1 ? "\n,\n" : "\n");
+                } else {
+                    saveFile(path, name + ".json", obj.toString());
+                }
                 list.append(name).append("\n");
             }
-        });
-        saveFile(path, "components.properties", list.toString());
-    }
-
-    public void saveFile(String folder, String fileName, String text) {
-//        LOGGER.info("Creating component " + fileName);
-        try {
-            File targetFile = Paths.get(folder, fileName).toFile();
-            Files.copy(new ByteArrayInputStream(text.getBytes()), targetFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
-        } catch (IOException e) {
-            e.printStackTrace();
+        }
+//        saveFile(path, "components.properties", list.toString());
+        if (singleFile) {
+            sources.append("]");
+            saveFile(path, "components.json", sources.toString());
         }
     }
 
@@ -95,5 +87,4 @@ public final class CamelComponentsGenerator {
             return null;
         }
     }
-
 }

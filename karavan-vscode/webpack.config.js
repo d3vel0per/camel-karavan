@@ -6,7 +6,6 @@
 const path = require("path");
 const webpack = require("webpack");
 const MiniCssExtractPlugin = require("mini-css-extract-plugin");
-const StaticSiteGeneratorPlugin = require("static-site-generator-webpack-plugin");
 const CopyPlugin = require("copy-webpack-plugin");
 
 const imageInlineSizeLimit = parseInt(
@@ -29,7 +28,10 @@ const baseConfig = (webpackEnv) => {
                 path: require.resolve("path-browserify"),
                 url: require.resolve("url"),
             },
-            extensions: [".ts", ".tsx", ".js"],
+            alias: {
+                core: path.resolve(__dirname, 'webview/core/'),
+              },
+            extensions: ['', ".ts", ".tsx", ".js"],
         },
         module: {
             rules: [
@@ -91,7 +93,7 @@ const baseConfig = (webpackEnv) => {
 const extensionConfig = (webpackEnv) => {
     return {
         ...baseConfig(webpackEnv),
-        target: "node",
+        target:  "node",
         entry: "./src/extension.ts",
         output: {
             path: path.resolve(__dirname, "dist"),
@@ -134,17 +136,13 @@ const prerenderConfig = (webpackEnv) => {
             new MiniCssExtractPlugin({
                 filename: "ignore.css",
             }),
-            new StaticSiteGeneratorPlugin({
-                paths: ["/"],
-            }),
             new webpack.ProvidePlugin({
                 Buffer: ["buffer", "Buffer"],
                 process: "process/browser",
             }),
             new CopyPlugin({
                 patterns: [
-                    {from: "kamelets", to: "kamelets"},
-                    {from: "components", to: "components"}
+                    {from: "metadata", to: "metadata"}
                 ],
             }),
         ],

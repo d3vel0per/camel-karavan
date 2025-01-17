@@ -16,44 +16,67 @@
  */
 package org.apache.camel.karavan.generator;
 
-import io.vertx.core.Vertx;
+import org.apache.camel.builder.RouteBuilder;
 import org.apache.camel.kamelets.catalog.KameletsCatalog;
-import org.jboss.logging.Logger;
+import org.apache.camel.v1.Kamelet;
 
-import javax.inject.Inject;
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.stream.Collectors;
 
-public class KameletGenerator {
+public class KameletGenerator extends AbstractGenerator {
 
-    @Inject
-    Vertx vertx;
-
-
-    private static final Logger LOGGER = Logger.getLogger(KameletGenerator.class.getName());
-
-    public static void generate() throws Exception {
+    public static void generate(String... paths) throws Exception {
         KameletGenerator g = new KameletGenerator();
-        g.createKamelets("karavan-app/src/main/resources/kamelets");
-        g.createKamelets("karavan-vscode/kamelets");
+        for (String path : paths) {
+            g.createKamelets(path + "/metadata", true);
+        }
     }
 
-    public void createKamelets(String folder){
-        LOGGER.info("Creating default Kamelets");
-        KameletsCatalog catalog = new KameletsCatalog();
-        catalog.getKamelets().entrySet().stream()
-                .map(k -> k.getValue().getMetadata().getName())
-                .forEach(name -> saveKamelet(folder, name));
-        LOGGER.info("Created default Kamelets");
+    public void createKamelets(String folder, boolean singleFile) {
+        StringBuilder list = new StringBuilder();
+        StringBuilder sources = new StringBuilder();
+
+        var kamelets = listResources("/kamelets/").stream().sorted().toList();
+        for (int i = 0; i < kamelets.size() ; i++) {
+            var fileName = kamelets.get(i);
+            var name = fileName.replace(".kamelet.yaml", "");
+            list.append(name).append("\n");
+            if (singleFile) {
+                sources.append(readKamelet(fileName)).append(i != kamelets.size() - 1 ? "\n---\n": "\n");
+            } else {
+                saveKamelet(folder, fileName);
+            }
+        }
+//        saveFile(folder, "kamelets.properties", list.toString());
+        if (singleFile) {
+            saveFile(folder, "kamelets.yaml", sources.toString());
+        }
     }
 
-    public void saveKamelet(String folder, String name) {
-//        LOGGER.info("Creating kamelet " + name);
-        String fileName = name + ".kamelet.yaml";
+    public String readKamelet(String fileName) {
+        InputStream inputStream = KameletsCatalog.class.getResourceAsStream("/kamelets/" + fileName);
+        return new BufferedReader(
+                new InputStreamReader(inputStream, StandardCharsets.UTF_8))
+                .lines()
+                .filter(s -> !s.startsWith("#"))
+                .collect(Collectors.joining("\n"));
+    }
+
+    public void saveKamelet(String folder, String fileName) {
         InputStream inputStream = KameletsCatalog.class.getResourceAsStream("/kamelets/" + fileName);
         try {
             File targetFile = Paths.get(folder, fileName).toFile();

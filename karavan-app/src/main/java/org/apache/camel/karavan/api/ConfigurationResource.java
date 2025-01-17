@@ -16,34 +16,58 @@
  */
 package org.apache.camel.karavan.api;
 
-import org.eclipse.microprofile.config.inject.ConfigProperty;
-import org.jboss.resteasy.reactive.RestResponse;
+import io.vertx.core.json.JsonObject;
+import io.vertx.mutiny.core.eventbus.EventBus;
+import jakarta.inject.Inject;
+import jakarta.ws.rs.*;
+import jakarta.ws.rs.core.MediaType;
+import jakarta.ws.rs.core.Response;
+import org.apache.camel.karavan.docker.DockerService;
+import org.apache.camel.karavan.service.ConfigService;
 
-import javax.ws.rs.GET;
-import javax.ws.rs.Path;
-import javax.ws.rs.Produces;
-import javax.ws.rs.core.MediaType;
-import java.util.Map;
+import java.util.HashMap;
 
-@Path("/configuration")
+import static org.apache.camel.karavan.KaravanEvents.CMD_SHARE_CONFIGURATION;
+
+@Path("/ui/configuration")
 public class ConfigurationResource {
 
-    @ConfigProperty(name = "karavan.version")
-    String version;
+    @Inject
+    ConfigService configService;
 
-    @ConfigProperty(name = "karavan.mode")
-    String mode;
+    @Inject
+    DockerService dockerService;
+
+    @Inject
+    EventBus eventBus;
 
     @GET
     @Produces(MediaType.APPLICATION_JSON)
-    public RestResponse<Map<String, String>> getConfiguration() throws Exception {
-
-        return RestResponse.ResponseBuilder.ok(
-                Map.of(
-                        "karavan.version", version,
-                        "karavan.mode", mode
-                )
-        ).build();
+    public Response getConfiguration() throws Exception {
+        return Response.ok(configService.getConfiguration(null)).build();
     }
 
+    @GET
+    @Path("/info")
+    @Produces(MediaType.APPLICATION_JSON)
+    public Response getInfo() throws Exception {
+        if (ConfigService.inKubernetes()) {
+            return Response.ok().build();
+        } else {
+            return Response.ok(dockerService.getInfo()).build();
+        }
+    }
+
+    @POST
+    @Path("/share/")
+    @Produces(MediaType.APPLICATION_JSON)
+    @Consumes(MediaType.APPLICATION_JSON)
+    public Response share(HashMap<String, String> params)  {
+        try {
+            eventBus.publish(CMD_SHARE_CONFIGURATION, JsonObject.mapFrom(params));
+            return Response.ok().build();
+        } catch (Exception e) {
+            return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(e.getMessage()).build();
+        }
+    }
 }

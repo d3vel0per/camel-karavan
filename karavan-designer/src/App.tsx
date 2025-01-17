@@ -16,112 +16,212 @@
  */
 import * as React from "react";
 import {
+    Bullseye,
+    Button,
+    Divider,
+    Flex,
+    FlexItem,
+    Masthead,
     Page,
+    PageSidebar,
+    PageSidebarBody,
+    Spinner,
+    Tooltip,
 } from "@patternfly/react-core";
-import {KaravanDesigner} from "./designer/ui/KaravanDesigner";
-import {KameletApi} from "./designer/api/KameletApi";
-import {ComponentApi} from "./designer/api/ComponentApi";
+import {KameletApi} from "karavan-core/lib/api/KameletApi";
+import {ComponentApi} from "karavan-core/lib/api/ComponentApi";
+import {BlueprintIcon} from "@patternfly/react-icons";
+import KnowledgebaseIcon from "@patternfly/react-icons/dist/js/icons/book-open-icon";
+import TopologyIcon from "@patternfly/react-icons/dist/js/icons/topology-icon";
+import {KaravanIcon} from "./designer/icons/KaravanIcons";
+import './designer/karavan.css';
+import {DesignerPage} from "./DesignerPage";
+import {TemplateApi} from "karavan-core/lib/api/TemplateApi";
+import {Notification} from "./designer/utils/Notification";
+import {EventBus} from "./designer/utils/EventBus";
+import {TopologyTab} from "./topology/TopologyTab";
+import {useEffect, useState} from "react";
+import {IntegrationFile} from "karavan-core/lib/model/IntegrationDefinition";
+import {KnowledgebaseHome} from "./KnowledgebaseHome";
+import {SpiBeanApi} from "karavan-core/lib/api/SpiBeanApi";
 
-interface Props {
+class MenuItem {
+    pageId: string = '';
+    tooltip: string = '';
+    icon: any;
+
+    constructor(pageId: string, tooltip: string, icon: any) {
+        this.pageId = pageId;
+        this.tooltip = tooltip;
+        this.icon = icon;
+    }
 }
 
-interface State {
-    name: string
-    yaml: string
-    key: string
-}
+export function App() {
 
-class App extends React.Component<Props, State> {
+    const [pageId, setPageId] = useState<string>('designer');
+    const [name, setName] = useState<string>('example.yaml');
+    const [key, setKey] = useState<string>('');
+    const [yaml, setYaml] = useState<string>('');
+    const [loaded, setLoaded] = useState<boolean>(false);
 
-    public state: State = {
-        name: '',
-        yaml: 'apiVersion: camel.apache.org/v1\n' +
-            'kind: Integration\n' +
-            'metadata:\n' +
-            '  name: \'\'\n' +
-            'spec:\n' +
-            '  flows:\n' +
-            '    - from:\n' +
-            '        uri: \'kamelet:http-secured-source\'\n' +
-            '        steps:\n' +
-            '          - unmarshal:\n' +
-            '              json:\n' +
-            '                  library: gson\n' +
-            '          - set-body:\n' +
-            '              expression: \n' +
-            '                constant: "Hello Yaml !!!"\n' +
-            '          - pollEnrich:\n' +
-            '              expression: {}\n' +
-            '          - log: \'${body}\'\n' +
-            '          - to: \n' +
-            '               uri: "log:info:xxx"\n' +
-            '               parameters:\n' +
-            '                   level: \'OFF\'\n' +
-            '                   logMask: true \n' +
-            '          - choice:\n' +
-            '              otherwise: {}\n' +
-            '              when:\n' +
-            '                - expression: {}\n' +
-            '                  steps:\n' +
-            '                    - to-d: {}\n'
-            ,
-        key: ''
-    };
+    useEffect(() => {
+        Promise.all([
+            fetch("metadata/kamelets.yaml"),
+            fetch("metadata/components.json"),
+            fetch("metadata/spiBeans.json"),
+            fetch("snippets/org.apache.camel.AggregationStrategy"),
+            fetch("snippets/org.apache.camel.Processor"),
+            fetch("example/demo.camel.yaml"),
+            // fetch("example/avro-serialize-action.kamelet.yaml"),
+            // fetch("components/blocked-components.properties"),
+            // fetch("kamelets/blocked-kamelets.properties")
+            // fetch("example/plc4x-ads-source.kamelet.yaml")
+            // fetch("example/aws-cloudwatch-sink.kamelet.yaml")
+            // fetch("example/aws-s3-cdc-source.kamelet.yaml")
+            //fetch("components/supported-components.json"),
+            
+        ]).then(responses =>
+            Promise.all(responses.map(response => response.text()))
+        ).then(data => {
+            const kamelets: string[] = [];
+            data[0].split("\n---\n").map(c => c.trim()).forEach(z => kamelets.push(z));
+            KameletApi.saveKamelets(kamelets, true);
 
-    componentDidMount() {
+            const jsons: string[] = [];
+            JSON.parse(data[1]).forEach((c: any) => jsons.push(JSON.stringify(c)));
+            ComponentApi.saveComponents(jsons, true);
 
-        ["http-secured-sink.kamelet.yaml",
-            "timer-source.kamelet.yaml",
-            "http-secured-source.kamelet.yaml",
-            "http-sink.kamelet.yaml",
-            "http-source.kamelet.yaml",
-            "insert-field-action.kamelet.yaml",
-            "insert-header-action.kamelet.yaml",
-            "kafka-not-secured-sink.kamelet.yaml",
-            "kafka-not-secured-source.kamelet.yaml",
-            "kafka-sink.kamelet.yaml",
-            "kafka-source.kamelet.yaml"].forEach(name =>
-            fetch("kamelets/" + name)
-                .then((r) => r.text())
-                .then(value => KameletApi.saveKamelet(value)));
+            jsons.length = 0;
+            JSON.parse(data[2]).forEach((c: any) => jsons.push(JSON.stringify(c)));
+            SpiBeanApi.saveSpiBeans(jsons, true);
 
-        ["bonita.json",
-            "activemq.json",
-            "docker.json",
-            "netty-http.json",
-            "jms.json",
-            "sql.json",
-            "file.json",
-            "log.json",
-            "coap+tcp.json",
-            "pg-replication-slot.json",
-            "rest-api.json",
-            "rest-openapi.json",
-            "kubernetes-service-accounts.json",
-            "mvel.json"].forEach(name =>
-            fetch("components/" + name)
-                .then((r) => r.text())
-                .then(value => ComponentApi.saveComponent(value)));
+            setLoaded(true);
 
-    }
+            TemplateApi.saveTemplate("org.apache.camel.AggregationStrategy", data[3]);
+            TemplateApi.saveTemplate("org.apache.camel.Processor", data[4]);
 
-    save(filename: string, yaml: string) {
-        console.log(filename);
-        console.log(yaml);
-    }
-
-    public render() {
-        return (
-            <Page className="karavan">
-                <KaravanDesigner key={this.state.key} filename={this.state.name} yaml={this.state.yaml}
-                                 onSave={(filename, yaml) => this.save(filename, yaml)}
-                                 borderColor="#fb8824"
-                                 borderColorSelected="black"
-                                 dark={document.body.className.includes('vscode-dark')}
-                />
-            </Page>
+            if (data[5]) {
+                setYaml(data[5]);
+                // setName("plc4x-ads-source.kamelet.yaml");
+                setName("demo.camel.yaml");
+            }
+            if (data[6]) {
+                ComponentApi.saveBlockedComponentNames(data[6].split('\r\n'));
+            }
+            if (data[8]) {
+                KameletApi.saveBlockedKameletNames(data[8].split('\n'));
+            }
+ 	        if (data[9]) {
+                ComponentApi.saveSupportedComponents(data[9]);
+                ComponentApi.setSupportedOnly(true);
+            }
+           
+        }).catch(err => {
+                console.log(err);
+                EventBus.sendAlert("Error", err.text, 'danger')
+            }
         );
+    });
+
+    function save(filename: string, yaml: string, propertyOnly: boolean) {
+        // console.log(yaml);
     }
+
+    function getSpinner() {
+        return (
+            <Bullseye className="loading-page">
+                <Spinner className="progress-stepper"  diameter="80px" aria-label="Loading..."/>
+            </Bullseye>
+        )
+    }
+
+    function pageNav ()  {
+        const pages: MenuItem[] = [
+            new MenuItem("designer", "Designer", <BlueprintIcon/>),
+            new MenuItem("topology", "Topology", <TopologyIcon/>),
+            new MenuItem("knowledgebase", "Knowledgebase", <KnowledgebaseIcon/>),
+        ]
+        return (<Flex className="nav-buttons" direction={{default: "column"}} style={{height: "100%"}}
+                      spaceItems={{default: "spaceItemsNone"}}>
+            <FlexItem alignSelf={{default: "alignSelfCenter"}}>
+                <Tooltip className="logo-tooltip" content={"Apache Camel Karavan"}
+                         position={"right"}>
+                    {KaravanIcon()}
+                </Tooltip>
+            </FlexItem>
+            {pages.map(page =>
+                <FlexItem key={page.pageId} className={pageId === page.pageId ? "nav-button-selected" : ""}>
+                    <Tooltip content={page.tooltip} position={"right"}>
+                        <Button id={page.pageId} icon={page.icon} variant={"plain"}
+                                className={pageId === page.pageId ? "nav-button-selected" : ""}
+                                onClick={event => setPageId(page.pageId)}
+                        />
+                    </Tooltip>
+                </FlexItem>
+            )}
+            <FlexItem flex={{default: "flex_2"}} alignSelf={{default: "alignSelfCenter"}}>
+                <Divider/>
+            </FlexItem>
+        </Flex>)
+    }
+
+    function getPage() {
+        const dark = document.body.className.includes('vscode-dark');
+        switch (pageId) {
+            case "designer":
+                return (
+                    <DesignerPage
+                        name={name}
+                        yaml={yaml}
+                        onSave={(filename, yaml1, propertyOnly) => save(filename, yaml1, propertyOnly)}
+                        dark={dark}/>
+                )
+            case "knowledgebase":
+                return (
+                    <KnowledgebaseHome dark={dark}/>
+                )
+            case "topology":
+                return (
+                    <TopologyTab
+                        files={[new IntegrationFile("demo.camel.yaml", yaml)]}
+                        onSetFile={fileName => {}}
+                        onClickAddRoute={() => {}}
+                        onClickAddREST={() => {}}
+                        onClickAddBean={() => {}}
+                        onClickAddKamelet={() => {}}
+                        hideToolbar={false}
+                    />
+                )
+        }
+    }
+
+    function getHeader () {
+        return (<Masthead>
+        </Masthead>)
+    }
+
+    function getSidebar () {
+        return (<PageSidebar isSidebarOpen={true} id="fill-sidebar">
+            <PageSidebarBody>Navigation</PageSidebarBody>
+        </PageSidebar>)
+    }
+
+    return (
+        <Page className="karavan">
+            <Notification/>
+            <Flex direction={{default: "row"}} style={{width: "100%", height: "100%"}}
+                  alignItems={{default: "alignItemsStretch"}} spaceItems={{default: 'spaceItemsNone'}}>
+                <FlexItem>
+                    {pageNav()}
+                </FlexItem>
+                <FlexItem flex={{default: "flex_2"}} style={{height: "100%"}}>
+                    {!loaded && getSpinner()}
+                    {loaded && getPage()}
+                </FlexItem>
+            </Flex>
+        </Page>
+    )
 }
 
 export default App;
