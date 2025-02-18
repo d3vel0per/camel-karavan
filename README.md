@@ -4,95 +4,96 @@
 ![Quarkus](https://img.shields.io/badge/-Quarkus-orange.svg?style=for-the-badge&logo=quarkus)
 ![React](https://img.shields.io/badge/-React-orange.svg?style=for-the-badge&logo=react)
 ![Typescript](https://img.shields.io/badge/-Typescript-orange.svg?style=for-the-badge&logo=typescript)
-![License](https://img.shields.io/badge/License-Apache-green.svg?style=for-the-badge&logo=apache)
+![License](https://img.shields.io/badge/License-Apache-orange.svg?style=for-the-badge&logo=apache)
 
-# Apache Camel Karavan
-Karavan, an Integration Designer for Apache Camel makes integration easy and fun through visualization of integration pipeline.
+<h1 align="center" style="border-bottom: none">
+    Apache Camel Karavan
+</h1>
 
-### VS Code extension
-Install Karavan VS Code extension from the [Marketplace](https://marketplace.visualstudio.com/items?itemName=camel-karavan.karavan)
+**Apache Camel Karavan** is a **Low-Code Data Integration Platform** 
+It simplifies the Apache Camel experience and accelerates developer performance by visually designing and rapidly deploying integration microservices.
+
+* Full power of Apache Camel through Visual Tool
+* From Low-code use-cases to Pro-code projects
+* Powered by 10+ years of Community Intelligence
+
+<p align="center">
+  <img src="images/karavan-clouds.png"  alt="Apache Camel Karavan" />
+</p>
+
+## Features
+
+### Designer
+
+* Enterprise Integration Patterns
+* 300+ Integration Components 
+* REST API designer with OpenAPI to REST DSL generator
+* YAML for Integration and Java custom code
+
+#### Topology view
+<p align="center">
+  <img src="images/topology.png"  alt="Topology" />
+</p>
+
+#### Route designer
+<p align="center">
+  <img src="images/designer-routes.png"  alt="Routes" />
+</p>
+
+#### REST API designer
+<p align="center">
+  <img src="images/designer-rest.png"  alt="REST" />
+</p>
+
+### Deployer
+* Simple shell scripts for build and deploy
+* Configuration 
+* Predefined customizable scripts for different platforms
+
+### Developer Dashboard
+* Hot Reload
+* View live logs during development
+* Tracing Exchange Data 
+
+<p align="center">
+  <img src="images/karavan-dashboard.png"  alt="karavan-dashboard" />
+</p>
+
+## Architecture
+
+Apache Camel Karavan components:
+
+1. **Karavan app** acts as the central interface for the platform, allowing users to manage and orchestrate their integration projects.
+2. **Build Container** started by the Karavan app to run integrations in developer mode (dev-mode), package and deploy integrations.
+3. **Integration microservices** delivered by the platform.
+4. **Git repository** stores all essential project files, including integration YAML configurations, application.properties, container configurations, deployment resources, and templates. It is considered the source of truth for the applications.
+5. An **Image Registry** is used by the Apache Camel Karavan to store container images that are generated during the build process.
+
+<p align="center">
+  <img src="images/architecture.png"  alt="architecture" />
+</p>
 
 
-![karavan-vscode](screenshots/karavan-vscode.png)
+## Local
+Karavan provides VS Code extension for local developer experience
+* Design, code and run integrations on your laptop or PC 
+* Deploy to Kubernetes or Openshift
+* Download from [Marketplace](https://marketplace.visualstudio.com/items?itemName=camel-karavan.karavan) or [Open VSX Registry](https://open-vsx.org/extension/camel-karavan/karavan)
 
-### Standalone application
+## Documentation
 
- Install Karavan Standalone command line: `docker pull ghcr.io/apache/camel-karavan:latest`
+### How to install on
+* [Docker](docs/WEB_DOCKER.md)
+* [Kubernetes](docs/WEB_KUBERNETES.md)
+* [Openshift](docs/WEB_OPENSHIFT.md)
 
-![karavan](screenshots/karavan.png)
-
-## Project structure
-1. Karavan-generator  
-Generate Camel Models and Api from Camel sources to Typescript in Karavan-designer
-2. Karavan-Designer  
-KaravanDesigner UI component and simple web app
-3. Karavan-vscode  
-VS Code extension based on KaravanDesigner
-4. Karavan-app  
-Karavan Application
-5. Karavan-demo  
-Demo of Karavan use cases
+### Developer guide
+* [How to build](docs/DEV.md)
 
 
-## How to build
-1. Generate Camel Models ad API for Typescript
-```
-mvn clean compile exec:java -Dexec.mainClass="org.apache.camel.karavan.generator.KaravanGenerator" -f karavan-generator
-```
+### Feedback
+If you haven't done so yet, please be sure to download Karavan and give it a try. We're excited to receive your feedback and learn about your experiences!
 
-2. Build VS Code extension
-```
-cd  karavan-vscode
-yarn install
-yarn run compile // dev
-yarn run package //prod
-```
+* [Ask questions](https://github.com/apache/camel-karavan/discussions)
+* [Open Issues](https://github.com/apache/camel-karavan/issues)
 
-3. Build Karavan app  
-- Build JVM Mode
-```
-cd karavan-app
-mvn clean package -Dquarkus.container-image.build=true
-```
-- Build native
-```
-DOCKER_BUILDKIT=1 docker build -f karavan-app/src/main/docker/Dockerfile.multistage -t apache/camel-karavan .
-```
-
-## Development Karavan app
-You can run your application in dev mode that enables live coding using:
-- Backend
-```shell script
-cd karavan-app
-mvn compile quarkus:dev
-```
-- Frontend
-```shell script
-cd karavan-app/src/main/webapp/
-npm start
-```
-
-## Running in local mode
-- Run JVM Mode
-```shell script
-docker run -it -p 8080:8080 -v $(pwd):/deployments/integrations ghcr.io/apache/camel-karavan:latest
-```
-For SELinux
-```shell script
-docker run -it -p 8080:8080 -v $(pwd):/deployments/integrations:z ghcr.io/apache/camel-karavan:latest
-```
-
-- Run native
-```shell script
-docker run -it -p 8080:8080 -v $(pwd):/deployments/integrations ghcr.io/apache/camel-karavan-native:latest
-```
-For SELinux
-```shell script
-docker run -it -p 8080:8080 -v $(pwd):/deployments/integrations:z ghcr.io/apache/camel-karavan-native:latest
-```
-
-## Running in GitOps mode
-[Karavan demo on OpenShift](karavan-demo/openshift/README.md)
-
-## Running in Serverless mode
-[Karavan demo on Kubernetes](karavan-demo/serverless/README.md)

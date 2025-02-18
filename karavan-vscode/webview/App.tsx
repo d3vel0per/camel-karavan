@@ -1,5 +1,5 @@
 /*
- * Licensed to the Apache Software Foundation (ASF) under one or more
+ * Licensed to the Apache Software Foundation (ASF) xunder one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
  * The ASF licenses this file to You under the Apache License, Version 2.0
@@ -16,12 +16,18 @@
  */
 import * as React from "react";
 import {
-  Page,
+  Page, PageSection, Spinner, Text, TextVariants
 } from "@patternfly/react-core";
-import {KaravanDesigner} from "../designer/ui/KaravanDesigner";
+import { KaravanDesigner } from "./designer/KaravanDesigner";
 import vscode from "./vscode";
-import {KameletApi} from "../designer/api/KameletApi";
-import { ComponentApi } from "../designer/api/ComponentApi";
+import { KameletApi } from "core/api/KameletApi";
+import { ComponentApi } from "core/api/ComponentApi";
+import { TemplateApi } from "./core/api/TemplateApi";
+import { EventBus } from "./designer/utils/EventBus";
+import { KnowledgebasePage } from "./knowledgebase/KnowledgebasePage";
+import { TopologyTab } from "./topology/TopologyTab";
+import {BeanFactoryDefinition} from "core/model/CamelDefinition";
+import { IntegrationFile } from "core/model/IntegrationDefinition";
 
 interface Props {
   dark: boolean
@@ -29,60 +35,253 @@ interface Props {
 
 interface State {
   filename: string
+  relativePath: string
+  fullPath: string
   yaml: string
   key: string
+  loaded: boolean
+  loadingMessages: string[]
+  interval?: NodeJS.Timeout
+  scheduledYaml: string
+  hasChanges: boolean
+  page: "designer" | "knowledgebase" | 'topology'
+  active: boolean
+  tab?: "routes" | "rest" | "beans"
+  files: IntegrationFile[],
+  propertyPlaceholders: string[],
+  beans: BeanFactoryDefinition[]
 }
 
 class App extends React.Component<Props, State> {
 
   public state: State = {
     filename: '',
+    relativePath: '',
+    fullPath: '',
     yaml: '',
-    key: ''
+    key: '',
+    loaded: false,
+    loadingMessages: [],
+    scheduledYaml: '',
+    hasChanges: false,
+    page: "designer",
+    active: false,
+    files: [],
+    propertyPlaceholders: [],
+    beans: []
   };
 
-
-  componentDidMount() {
-    window.addEventListener('message', event => {
-      const message = event.data; // The JSON data our extension sent
-      switch (message.command) {
-        case 'kamelets':
-          KameletApi.saveKamelets(message.kamelets);
-          break;
-        case 'components':
-          ComponentApi.saveComponents(message.components);
-          break;  
-        case 'open':
-          if (this.state.filename === '' && this.state.key === ''){
-            this.setState({filename: message.filename, yaml: message.yaml, key: Math.random().toString()});
-          }
-          break;
-      }
-    });
+  saveScheduledChanges = () => {
+    if (this.state.active && this.state.hasChanges) {
+      this.save(this.state.relativePath, this.state.scheduledYaml, false);
+    }
   }
 
-  save(filename: string, yaml: string) {
-    vscode.postMessage({
-      command: 'save',
-      filename: filename,
-      yaml: yaml
-    })
+  componentDidMount() {
+    window.addEventListener('message', this.onMessage, false);
+    vscode.postMessage({ command: 'getData' });
+    this.setState({ interval: setInterval(this.saveScheduledChanges, 2000) });
+    if (this.props.dark) {
+      const box = document.getElementsByTagName('html');
+      if (box != null && box.length > 0) {
+        box[0].classList.add('pf-v5-theme-dark');
+        // box.classList.remove('bg-yellow');
+      }
+    }
+  }
+
+  componentWillUnmount() {
+    if (this.state.interval) clearInterval(this.state.interval);
+    window.removeEventListener('message', this.onMessage, false);
+  }
+
+  onMessage = (event) => {
+    const message = event.data;
+    console.log("message.command", message.command);
+    switch (message.command) {
+      case 'kamelets':
+        KameletApi.saveKamelets(message.kamelets, true);
+        this.setState((prevState: State) => {
+          prevState.loadingMessages.push("Kamelets loaded");
+          return { loadingMessages: prevState.loadingMessages }
+        });
+        break;
+      case 'components':
+        ComponentApi.saveComponents(message.components, true);
+        this.setState((prevState: State) => {
+          prevState.loadingMessages.push("Components loaded");
+          return { loadingMessages: prevState.loadingMessages }
+        });
+        break;
+      case 'supportedComponents':
+        ComponentApi.saveSupportedComponents(message.components);
+        this.setState((prevState: State) => {
+          prevState.loadingMessages.push("Supported Components loaded");
+          return { loadingMessages: prevState.loadingMessages }
+        });
+        break;
+      case 'supportedOnly':
+        ComponentApi.setSupportedOnly(true);
+        break;
+      case 'files':
+        this.saveIntegrationFiles(message.files);
+        this.setState((prevState: State) => {
+          prevState.loadingMessages.push("Integrations loaded");
+          return { loadingMessages: prevState.loadingMessages }
+        });
+        break;
+      case 'templates':
+        const templates = message.templates;
+        const map = new Map(Object.keys(templates).map(key => [key, templates[key]]));
+        TemplateApi.saveTemplates(map, true);
+        this.setState((prevState: State) => {
+          prevState.loadingMessages.push("Templates loaded");
+          return { loadingMessages: prevState.loadingMessages }
+        });
+        break;
+      case 'javaCode':
+        const javaCode = message.javaCode;
+        const javaCodeMap = new Map(Object.keys(javaCode).map(key => [key, javaCode[key]]));
+        TemplateApi.saveJavaCodes(javaCodeMap, true);
+        break;
+      case 'open':
+        if (this.state.filename === '' && this.state.key === '') {
+          if (message.page !== "designer" && this.state.interval) clearInterval(this.state.interval);
+          this.setState({
+            page: message.page,
+            filename: message.filename,
+            yaml: message.yaml,
+            scheduledYaml: message.yaml,
+            relativePath: message.relativePath,
+            fullPath: message.fullPath,
+            key: Math.random().toString(),
+            loaded: true,
+            active: true,
+            tab: message.tab,
+            propertyPlaceholders: message.propertyPlaceholders,
+            beans: message.beans
+          });
+        }
+        break;
+      case 'activate':
+        this.setState({ loaded: false, filename: '', key: '', active: true, tab: message.tab });
+        vscode.postMessage({ command: 'getData', reread: true });
+        break;
+      case 'deactivate':
+        this.setState({ active: false, hasChanges: false });
+        break;
+      case 'downloadImage':
+        EventBus.sendCommand("downloadImage");
+        break;
+      case 'blockList':
+          const blockList = message.blockList;
+        const blockListMap = new Map(Object.keys(blockList).map(key => [key, blockList[key]])).forEach((list,key) => {
+          if (key === 'components-blocklist.txt') {
+            ComponentApi.saveBlockedComponentNames(list.split(/\r?\n/));
+          }
+          else if (key === 'kamelets-blocklist.txt') {
+            KameletApi.saveBlockedKameletNames(list.split(/\r?\n/));
+          }
+        });
+          this.setState((prevState: State) => {
+            prevState.loadingMessages.push("block lists loaded");
+            return { loadingMessages: prevState.loadingMessages }
+          });
+          break;
+    }
+  };
+
+  save(filename: string, yaml: string, propertyOnly: boolean) {
+    if (this.state.active) {
+      if (!propertyOnly) {
+        vscode.postMessage({ command: 'save', filename: filename, relativePath: this.state.relativePath, fullPath: this.state.fullPath, code: yaml });
+        this.setState({ scheduledYaml: yaml, hasChanges: false });
+      } else {
+        this.setState({ scheduledYaml: yaml, hasChanges: true });
+      }
+    }
+  }
+
+  saveJavCode(name: string, code: string) {
+    TemplateApi.saveJavaCode(name, code);
+    vscode.postMessage({ command: 'saveCode', name: name, yamlFullPath: this.state.fullPath, yamFileName: this.state.filename, code: code });
+  }
+
+  savePropertyPlaceholder(key: string, value: string) {
+    vscode.postMessage({ command: 'savePropertyPlaceholder', key: key, value: value });
+  }
+
+  saveIntegrationFiles(files: any) {
+    const f = Object.keys(files).map(key => new IntegrationFile(key, files[key]));
+    this.setState({ files: f });
+
+  }
+
+ onchangeBlockedList(type: string, name: string, checked: boolean) {
+  let fileContent = '';
+  if (type === "component") {
+      fileContent = ComponentApi.saveBlockedComponentName(name, checked).join('\n');
+  } else {
+      fileContent =KameletApi.saveBlockedKameletName(name, checked).join('\n');
+  }
+  vscode.postMessage({ command: 'saveBlockedList', key: type, value: fileContent });
   }
 
   public render() {
+    const { loadingMessages, filename, key, yaml, page, loaded, tab } = this.state;
+    const { dark } = this.props;
     return (
       <Page className="karavan">
-         <KaravanDesigner 
-          key={this.state.key} 
-          filename={this.state.filename} 
-          yaml={this.state.yaml} 
-          onSave={(filename, yaml) => this.save(filename, yaml)}
-          borderColor="#fca338"
-          borderColorSelected="#fee3c3"
-          dark={this.props.dark}
-         />
+        {!loaded &&
+          <PageSection variant={dark ? "dark" : "light"} className="loading-page">
+            <Spinner className="progress-stepper" diameter="80px" aria-label="Loading..." />
+            {/* {loadingMessages.map(message => <Text component={TextVariants.h5}>{message}</Text>)} */}
+            <Text component={TextVariants.h5}>Loading...</Text>
+          </PageSection>
+        }
+        {loaded && page === "designer" &&
+          <KaravanDesigner
+            showCodeTab={false}
+            key={key}
+            filename={filename}
+            yaml={yaml}
+            onSave={(filename, yaml, propertyOnly) => this.save(filename, yaml, propertyOnly)}
+            tab={tab}
+            dark={dark}
+            onSaveCustomCode={(name, code) => this.saveJavCode(name, code)}
+            onGetCustomCode={(name, javaType) => {
+              let code = TemplateApi.getJavaCode(name);
+              if (code === undefined || code.length === 0) code = TemplateApi.generateCode(javaType, name);
+              return new Promise<string | undefined>(resolve => resolve(code))
+            }}
+            propertyPlaceholders={this.state.propertyPlaceholders}
+            onSavePropertyPlaceholder={(key, value) => this.savePropertyPlaceholder(key, value)}
+            beans={this.state.beans}
+            onInternalConsumerClick={(uri, name, routeId) => {
+              vscode.postMessage({ command: 'internalConsumerClick', uri: uri, name: name, routeId: routeId });
+            }}
+            files={this.state.files.map(f => new IntegrationFile(f.name, f.code))}
+          />
+        }
+        {loaded && page === "knowledgebase" && 
+                <KnowledgebasePage 
+                          dark={dark} 
+                          showBlockCheckbox={true}
+                          changeBlockList={(type: string, name: string, checked: boolean) => this.onchangeBlockedList(type, name, checked)}/>
+        }
+        {loaded && page === "topology" &&
+          <TopologyTab
+            hideToolbar={true}
+            files={this.state.files}
+            onClickAddRoute={() => vscode.postMessage({ command: 'createIntegration' })}
+            onClickAddREST={() => vscode.postMessage({ command: 'createIntegration' })}
+            onClickAddBean={() => vscode.postMessage({ command: 'createIntegration' })}
+            onClickAddKamelet={() => vscode.postMessage({ command: 'createIntegration' })}
+            onSetFile={(fileName) => vscode.postMessage({ command: 'openFile', fileName: fileName })}
+          />
+        }
       </Page>
-    );
+    )
   }
 }
 

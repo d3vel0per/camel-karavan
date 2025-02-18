@@ -1,9 +1,0 @@
-                        case 'choiceStep':
-                            const o = (step as ChoiceStep).choice.otherwise;
-                            const w = (step as ChoiceStep).choice.when;
-                            const s: ProcessorStep[] = [];
-                            if (o) s.push(o);
-                            if (w) s.push(...w);
-                            result = CamelApi.findStep(s, uuid, step.uuid, result);
-                            if (result?.pathUuids !== undefined && result?.pathUuids.length > 0) result.pathUuids.push(step.uuid);
-                            break;
